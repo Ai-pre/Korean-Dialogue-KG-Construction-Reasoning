@@ -1,270 +1,155 @@
-# Korean Dialogue-based KG-aware Reasoning System
+# Korean Dialogue KG Reasoning
 
-**R-GCN + ATOMIC-style Knowledge Graph for Commonsense Inference**
+Rebuilt, reproducible, and security-safe version of the original Korean dialogue KG-aware reasoning prototype.
 
-## 📌 Overview
+The original repository had a strong idea but weak reproducibility:
 
-This project proposes a **KG-aware reasoning framework** for Korean daily dialogue, addressing a critical limitation of large language models (LLMs):
+- exposed API keys in source files
+- hard-coded local paths
+- no recoverable dataset bootstrap after artifacts were lost
+- isolated scripts instead of one runnable pipeline
 
-> **LLMs often fail to maintain consistent commonsense causal reasoning (intent–effect–emotion) in Korean conversational contexts.**
+This rebuild keeps the core idea alive:
 
-Instead of relying solely on parametric knowledge inside LLMs, this work introduces an **external structured commonsense Knowledge Graph (KG)** and integrates it into the inference pipeline using:
+1. extract dialogue events
+2. expand them into ATOMIC-style commonsense relations
+3. build a Korean event knowledge graph
+4. learn a lightweight relational encoder
+5. retrieve relevant graph context for KG-aware reasoning
 
-* **ATOMIC-style relational structure**
-* **R-GCN (Relational Graph Convolutional Network)**
-* **Event-level retrieval + prompt injection**
+## What Changed
 
-The system demonstrates that **KG-augmented inference produces more stable, causal-consistent, and hallucination-resistant outputs** than KG-free baselines.
+- Removed all hard-coded secrets and machine-specific paths.
+- Replaced one-off scripts with a single Python package and CLI.
+- Added curated bootstrap dialogue data so the project still runs even after losing the original artifacts.
+- Added rule-based fallbacks so the full demo works without external APIs.
+- Added optional OpenAI-compatible hooks for stronger event and relation generation.
+- Added tests and a clean end-to-end demo command.
 
----
+## How This Maps To The Previous Idea
 
-## 🔍 Problem Motivation
+The previous workflow in your slide can be mapped like this:
 
-While modern LLMs generate fluent Korean text, we observed repeated failures in:
+- `Kiwi + Bllossom` style event extraction:
+  the rebuild uses a clean event extraction interface with a dependency-free rule baseline and an optional LLM backend. If you later install Kiwi or connect a local OpenAI-compatible model server, the interface is already ready for that upgrade.
+- `KLUE/roberta-large -> 원인 / 관계 추출`:
+  the rebuild exposes a separate relation extraction stage. Right now it ships with curated seed triples plus a rule-based fallback, and it can be swapped for a classifier or LLM extractor later without changing the rest of the pipeline.
+- `KG + reasoning`:
+  graph building, relational encoding, retrieval, and KG-grounded answer generation are now stitched together into one reproducible flow.
 
-* Mixing causal directions (cause ↔ effect)
-* Confusing intent, emotion, and reaction types
-* Making unjustified inference jumps (hallucination)
-* Producing overly abstract or generic explanations
+## Project Layout
 
-These issues are especially severe in **short, ambiguous daily dialogue**, where commonsense grounding is required.
-
----
-
-## 🧠 Core Idea
-
-LLMs should **not infer everything alone**.
-
-Instead:
-
-1. **Extract events from dialogue**
-2. **Ground them in a structured commonsense KG**
-3. **Use KG as a latent reasoning space**, not a direct answer source
-4. **Guide LLM reasoning paths via retrieved KG context**
-
----
-
-## 🏗 System Architecture
-
-```
-User Dialogue
-      ↓
-Event Extraction (GPT-4o mini)
-      ↓
-ATOMIC-style Triple Generation (Korean)
-      ↓
-Knowledge Graph Construction
-      ↓
-R-GCN Training (Node Contextualization)
-      ↓
-EventMatcher (Semantic Retrieval)
-      ↓
-KG-aware Prompt Injection
-      ↓
-LLM Inference (Qwen / LLaMA)
+```text
+data/
+  bootstrap/demo_dialogues.jsonl
+kg_reasoning/
+  bootstrap.py
+  cli.py
+  event_extraction.py
+  graph.py
+  heuristics.py
+  inference.py
+  io.py
+  llm.py
+  relation_extraction.py
+  retrieval.py
+  schema.py
+  text.py
+  training.py
+tests/
+  test_pipeline.py
 ```
 
----
+## Requirements
 
-## 🧱 Knowledge Graph Construction
+- Python 3.11+
+- no external dependency is required for the offline demo
 
-### 🔹 Why Not Translate English ATOMIC?
+If you want stronger extraction/generation later, configure an OpenAI-compatible endpoint:
 
-We initially attempted to translate the English ATOMIC dataset, but encountered major issues:
-
-* PersonX / PersonY templates break Korean naturalness
-* Subject ambiguity and relation direction confusion
-* Unstable node semantics for graph learning
-
-➡️ **Decision**:
-❌ Drop English ATOMIC
-✅ Build **Korean-native ATOMIC-style KG from scratch**
-
----
-
-### 🔹 Event & Relation Generation
-
-Using **GPT-4o mini**, we automatically generate:
-
-* **Event** (Korean natural sentence)
-* **ATOMIC relations (9 types)**:
-
-  * `xIntent`, `xNeed`, `xEffect`, `xReact`, `xWant`
-  * `oEffect`, `oReact`, `oWant`
-  * `xAttr`
-
-Strict constraints were enforced:
-
-* One relation = one sentence
-* No moralizing / over-generalization
-* No abstract norms
-* Causality must be explicit
-
----
-
-## 🧪 KG Quality Control
-
-Randomly sampled **500 triples** were evaluated via GPT-4o mini on:
-
-* **Consistency**
-* **Commonsense Plausibility**
-* **Factuality**
-
-| Metric      | Score          |
-| ----------- | -------------- |
-| Consistency | 4.00           |
-| Commonsense | 4.40           |
-| Factuality  | 4.00           |
-| **Average** | **4.13 / 5.0** |
-
-Low-quality triples were aggressively discarded.
-➡️ **Quality > Quantity**
-
----
-
-## 🔗 R-GCN Reasoning Module
-
-### Purpose
-
-R-GCN is **not** used to output answers.
-
-Instead, it learns:
-
-> *How events are contextually connected via relational structure*
-
-### Design
-
-* **Node**: Korean event sentence
-* **Edge**: ATOMIC relation type
-* **Output**: Context-aware event embeddings
-
-This forms a **latent reasoning space** that helps guide LLM inference.
-
----
-
-## 🔎 EventMatcher (Retrieval Layer)
-
-At inference time:
-
-1. User input is embedded
-2. Most semantically similar event nodes are retrieved
-3. Their neighboring relations (`xIntent`, `xReact`, etc.) are collected
-4. Retrieved knowledge is summarized and injected into the prompt
-
-This prevents blind generation and anchors reasoning.
-
----
-
-## 🤖 KG-aware Inference Pipeline
-
-1. Encode user input
-2. Retrieve relevant KG events via EventMatcher
-3. Extract relational context (subgraph)
-4. Inject KG facts into LLM prompt
-5. Generate grounded response
-
-> **KG is used as contextual guidance, not as explicit facts to parrot**
-
----
-
-## 🧪 Experimental Strategy (KG ON / OFF)
-
-To verify KG effectiveness, we conducted **controlled A/B testing**.
-
-### Settings
-
-* **Baseline (KG-Free)**
-  LLM inference using only pretrained knowledge
-* **Proposed (KG-Augmented)**
-  Same LLM + retrieved KG context injected into prompt
-
-### Model
-
-* `llama-3-Korean-Bllossom-8B`
-
----
-
-## 📊 Evaluation Criteria
-
-### Qualitative Focus
-
-* **Causal Consistency**
-* **Emotion–Intent–Effect alignment**
-* **Hallucination frequency**
-* **Specificity vs abstraction**
-* **Inference stability**
-
----
-
-## 📈 Results & Analysis
-
-### Case Study
-
-**Input**:
-
-> “배가 너무 아파서 조퇴하고 싶어.”
-
-#### ❌ KG-Free (Baseline)
-
-* Misinterpreted “배” metaphorically
-* Injected unrelated school stress narratives
-* Produced abstract, incoherent reasoning
-
-➡️ **Hallucination + causal failure**
-
-#### ✅ KG-Augmented
-
-* Retrieved KG facts:
-
-  * Overeating → stomach pain
-  * Pain → desire to rest
-  * Honest expression of discomfort
-* Built clear causal chain:
-
-  ```
-  과식 → 복통 → 휴식 필요 → 조퇴 의도
-  ```
-
-➡️ **Grounded, specific, causally coherent response**
-
----
-
-## ✅ Conclusion
-
-This project demonstrates that:
-
-* LLMs alone are insufficient for stable commonsense reasoning
-* **Structured KG acts as a causal anchor**
-* KG-aware prompting significantly reduces hallucination
-* Reasoning quality improves without modifying LLM weights
-
-> **The key is not bigger models, but better knowledge structuring and retrieval.**
-
----
-
-## 🔮 Future Work
-
-* Multi-hop reasoning over KG
-* Retrieval-aware selective knowledge injection
-* Dynamic relation-path reasoning (`xIntent → xEffect → oReact`)
-* Alignment-aware KG filtering
-
----
-
-## 📁 Repository Structure (Recommended)
-
+```powershell
+$env:KG_REASONING_API_BASE="http://localhost:8000"
+$env:KG_REASONING_CHAT_MODEL="your-model-name"
+$env:KG_REASONING_API_KEY="optional"
 ```
-kg_project/
-├── data/
-│   └── korean_atomic_triples.json
-├── graph/
-│   └── graph_data.pkl
-├── rgcn/
-│   ├── rgcn_model.py
-│   └── train_rgcn.py
-├── inference/
-│   ├── event_matcher.py
-│   ├── kg_on_off.py
-│   └── prompt_builder.py
-└── README.md
+
+The client also understands `OPENAI_BASE_URL`, `OPENAI_API_BASE`, `OPENAI_API_KEY`, and `OPENAI_MODEL`.
+
+## Quick Start
+
+Run the full rebuilt demo:
+
+```powershell
+python -m kg_reasoning run-demo --query "배가 너무 아파서 조퇴하고 싶어."
+```
+
+Or, in this Codex workspace, use the bundled Python runtime:
+
+```powershell
+& "C:\Users\jaesa\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" -m kg_reasoning run-demo --query "배가 너무 아파서 조퇴하고 싶어."
+```
+
+## CLI Commands
+
+Prepare curated demo assets:
+
+```powershell
+python -m kg_reasoning prepare-demo --output-dir artifacts/demo
+```
+
+Extract events from dialogues:
+
+```powershell
+python -m kg_reasoning extract-events --dialogues artifacts/demo/dialogues.jsonl --output artifacts/demo/events.jsonl --provider hybrid
+```
+
+Expand events into ATOMIC-style triples:
+
+```powershell
+python -m kg_reasoning extract-relations --dialogues artifacts/demo/dialogues.jsonl --events artifacts/demo/events.jsonl --output artifacts/demo/triples.jsonl --provider hybrid
+```
+
+Build a graph bundle:
+
+```powershell
+python -m kg_reasoning build-graph --triples artifacts/demo/triples.jsonl --output artifacts/demo/graph.json
+```
+
+Train the lightweight relational encoder:
+
+```powershell
+python -m kg_reasoning train-encoder --graph artifacts/demo/graph.json --output artifacts/demo/encoder.json
+```
+
+Compare baseline vs KG-aware reasoning:
+
+```powershell
+python -m kg_reasoning infer --graph artifacts/demo/graph.json --encoder artifacts/demo/encoder.json --triples artifacts/demo/triples.jsonl --query "시험 망친 것 같아." --top-k 5
+```
+
+## Notes On The Rebuilt Encoder
+
+The original repo mentioned R-GCN, but the old public code was not packaged in a way that could be reproduced safely in this workspace.
+
+This rebuild therefore ships with a dependency-light relational encoder:
+
+- text hashing for node initialization
+- relation-aware link training
+- lightweight message passing for contextualization
+
+That keeps the graph-aware reasoning idea functional right now. If you want, we can later add:
+
+- a full PyTorch backend
+- Kiwi-based anchor extraction
+- a KLUE or sentence-transformer retrieval backend
+- a local Bllossom or Qwen event extraction backend
+
+## Security
+
+The old repository exposed API keys directly in source code. Those keys should be treated as compromised and rotated immediately in any upstream environment, even though they are no longer present in this rebuilt working tree.
+
+## Test
+
+```powershell
+python -m unittest discover -s tests -v
 ```

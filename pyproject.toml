@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "korean-dialogue-kg-reasoning"
+version = "0.1.0"
+description = "Rebuilt KG-aware reasoning toolkit for Korean dialogue"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Ai-pre contributors" }
+]
+dependencies = []
+keywords = ["korean", "dialogue", "knowledge-graph", "commonsense", "reasoning"]
+
+[project.scripts]
+kg-reasoning = "kg_reasoning.cli:main"
+
+[tool.setuptools]
+packages = ["kg_reasoning"]
