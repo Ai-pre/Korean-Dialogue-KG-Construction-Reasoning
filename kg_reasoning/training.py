@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from kg_reasoning.io import read_json, write_json
+from kg_reasoning.legacy_rgcn import LegacyRGCNConfig, train_legacy_rgcn
 from kg_reasoning.text import hash_vector, sigmoid
 
 
@@ -17,10 +18,20 @@ class TrainingConfig:
     learning_rate: float = 0.06
     layers: int = 2
     seed: int = 7
+    backend: str = "lightweight"
+    hidden_dim: int = 128
 
 
 def train_relational_encoder(graph: dict[str, Any], config: TrainingConfig | None = None) -> dict[str, Any]:
     cfg = config or TrainingConfig()
+    if cfg.backend == "legacy-rgcn":
+        legacy_config = LegacyRGCNConfig(
+            hidden_dim=cfg.hidden_dim,
+            num_layers=cfg.layers,
+            epochs=cfg.epochs,
+            learning_rate=cfg.learning_rate,
+        )
+        return train_legacy_rgcn(graph=graph, config=legacy_config)
     rng = np.random.default_rng(cfg.seed)
 
     nodes = graph["nodes"]
@@ -80,11 +91,13 @@ def train_relational_encoder(graph: dict[str, Any], config: TrainingConfig | Non
         "node_text_vectors": np.vstack([hash_vector(text, dim=cfg.dim) for text in nodes]).tolist(),
         "relation_embeddings": relation_vectors.tolist(),
         "config": {
+            "backend": cfg.backend,
             "dim": cfg.dim,
             "epochs": cfg.epochs,
             "learning_rate": cfg.learning_rate,
             "layers": cfg.layers,
             "seed": cfg.seed,
+            "hidden_dim": cfg.hidden_dim,
         },
         "metrics": metrics,
     }

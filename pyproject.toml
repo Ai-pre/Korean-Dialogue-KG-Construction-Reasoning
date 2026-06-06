@@ -7,12 +7,22 @@ name = "korean-dialogue-kg-reasoning"
 version = "0.1.0"
 description = "Rebuilt KG-aware reasoning toolkit for Korean dialogue"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 authors = [
   { name = "Ai-pre contributors" }
 ]
-dependencies = []
+dependencies = [
+  "numpy>=1.26",
+]
 keywords = ["korean", "dialogue", "knowledge-graph", "commonsense", "reasoning"]
+
+[project.optional-dependencies]
+sft = [
+  "accelerate>=0.33",
+  "peft>=0.11",
+  "torch>=2.1",
+  "transformers>=4.43",
+]
 
 [project.scripts]
 kg-reasoning = "kg_reasoning.cli:main"

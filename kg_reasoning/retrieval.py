@@ -66,12 +66,14 @@ class RetrievalIndex:
             [1.0 if expected_event_text == node_text else 0.0 for node_text in self.node_texts],
             dtype=np.float64,
         )
+        tag_weight = 0.10 if query_tag != "generic" else 0.0
+        event_weight = 0.25 if query_tag != "generic" else 0.0
         final_scores = (
             (0.40 * lexical_scores)
             + (0.15 * structural_scores)
             + (0.10 * overlap_scores)
-            + (0.10 * tag_scores)
-            + (0.25 * event_match_scores)
+            + (tag_weight * tag_scores)
+            + (event_weight * event_match_scores)
         )
         sorted_indices = np.argsort(final_scores)[::-1][:top_k]
         results: list[SearchResult] = []

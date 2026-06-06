@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from kg_reasoning.heuristics import build_relation_bundle
+from kg_reasoning.legacy_prompts import build_legacy_triple_prompt
 from kg_reasoning.llm import OpenAICompatibleClient
 from kg_reasoning.schema import DialogueRecord, EventRecord, RELATION_TYPES, TripleRecord
 
@@ -32,6 +33,11 @@ def extract_relations(
         if provider == "seed" and dialogue:
             rows.extend(seed_relations_from_dialogue(dialogue=dialogue, events=event_rows))
             continue
+        if provider in {"legacy-llm", "legacy-hybrid"} and client:
+            llm_rows = legacy_llm_extract_relations(event_rows=event_rows, client=client)
+            if llm_rows:
+                rows.extend(llm_rows)
+                continue
         if provider in {"llm", "hybrid"} and client:
             llm_rows = llm_extract_relations(event_rows=event_rows, client=client)
             if llm_rows:
@@ -93,6 +99,42 @@ def llm_extract_relations(
                     relation=relation,
                     tail=relation_map[relation],
                     extractor="llm",
+                )
+            )
+    return rows
+
+
+def legacy_llm_extract_relations(
+    event_rows: list[EventRecord],
+    client: OpenAICompatibleClient,
+) -> list[TripleRecord]:
+    rows: list[TripleRecord] = []
+    for event in event_rows:
+        prompt = build_legacy_triple_prompt(event_text=event.event_text, event_cause=event.event_cause)
+        try:
+            payload = client.chat_json_messages(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=2048,
+            )
+        except Exception:
+            return []
+        triples_payload = payload.get("triples", [])
+        relation_map = {
+            str(item.get("relation")): str(item.get("tail", "")).strip()
+            for item in triples_payload
+        }
+        if len(triples_payload) != len(RELATION_TYPES) or any(relation not in relation_map for relation in RELATION_TYPES):
+            return []
+        for relation in RELATION_TYPES:
+            rows.append(
+                TripleRecord(
+                    dialogue_id=event.dialogue_id,
+                    event_id=event.event_id,
+                    head=event.event_text,
+                    relation=relation,
+                    tail=relation_map[relation],
+                    extractor="legacy-llm",
                 )
             )
     return rows

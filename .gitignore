@@ -6,3 +6,7 @@ __pycache__/
 artifacts/
 *.npz
 *.log
+*.zip
+*.tar
+*.tar.gz
+*.tgz

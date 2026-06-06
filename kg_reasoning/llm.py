@@ -35,19 +35,41 @@ class OpenAICompatibleClient:
         return cls(base_url=base_url.rstrip("/"), model=model, api_key=api_key)
 
     def chat(self, system_prompt: str, user_prompt: str, temperature: float = 0.1) -> str:
-        payload = {
-            "model": self.model,
-            "temperature": temperature,
-            "messages": [
+        return self.chat_messages(
+            messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            temperature=temperature,
+        )
+
+    def chat_messages(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.1,
+        max_tokens: int | None = None,
+    ) -> str:
+        payload = {
+            "model": self.model,
+            "temperature": temperature,
+            "messages": messages,
         }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         response = self._post_json("/chat/completions", payload)
         return response["choices"][0]["message"]["content"].strip()
 
     def chat_json(self, system_prompt: str, user_prompt: str, temperature: float = 0.1) -> dict:
         text = self.chat(system_prompt=system_prompt, user_prompt=user_prompt, temperature=temperature)
+        return parse_json_from_text(text)
+
+    def chat_json_messages(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.1,
+        max_tokens: int | None = None,
+    ) -> dict:
+        text = self.chat_messages(messages=messages, temperature=temperature, max_tokens=max_tokens)
         return parse_json_from_text(text)
 
     def _post_json(self, route: str, payload: dict) -> dict:
