@@ -165,6 +165,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--lora-alpha", type=int, default=32)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--report-to", default="none")
+    parser.add_argument("--resume-from-checkpoint", default=None)
     return parser.parse_args(argv)
 
 
@@ -252,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     model.print_trainable_parameters()
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     trainer.save_model()
     tokenizer.save_pretrained(output_dir)
 
